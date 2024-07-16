@@ -1,0 +1,205 @@
+#include <windows.h>
+#include <taskschd.h>
+#include <comdef.h>
+#include <iostream>
+
+#pragma comment(lib, "taskschd.lib")
+#pragma comment(lib, "comsupp.lib")
+
+int main() {
+    HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    if (FAILED(hr)) {
+        std::cerr << "CoInitializeEx failed: " << hr << std::endl;
+        return 1;
+    }
+
+    ITaskService *pService = NULL;
+    hr = CoCreateInstance(CLSID_TaskScheduler, NULL, CLSCTX_INPROC_SERVER, IID_ITaskService, (void**)&pService);
+    if (FAILED(hr)) {
+        std::cerr << "Failed to create ITaskService instance: " << hr << std::endl;
+        CoUninitialize();
+        return 1;
+    }
+
+    hr = pService->Connect(_variant_t(), _variant_t(), _variant_t(), _variant_t());
+    if (FAILED(hr)) {
+        std::cerr << "ITaskService::Connect failed: " << hr << std::endl;
+        pService->Release();
+        CoUninitialize();
+        return 1;
+    }
+
+    ITaskFolder *pRootFolder = NULL;
+    hr = pService->GetFolder(_bstr_t(L"\\"), &pRootFolder);
+    if (FAILED(hr)) {
+        std::cerr << "Cannot get Root Folder pointer: " << hr << std::endl;
+        pService->Release();
+        CoUninitialize();
+        return 1;
+    }
+
+    pRootFolder->DeleteTask(_bstr_t(L"MyTask"), 0);
+
+    ITaskDefinition *pTask = NULL;
+    hr = pService->NewTask(0, &pTask);
+    pService->Release();
+    if (FAILED(hr)) {
+        std::cerr << "Failed to create a task definition: " << hr << std::endl;
+        pRootFolder->Release();
+        CoUninitialize();
+        return 1;
+    }
+
+    IRegistrationInfo *pRegInfo = NULL;
+    hr = pTask->get_RegistrationInfo(&pRegInfo);
+    if (FAILED(hr)) {
+        std::cerr << "Cannot get identification pointer: " << hr << std::endl;
+        pTask->Release();
+        pRootFolder->Release();
+        CoUninitialize();
+        return 1;
+    }
+
+    hr = pRegInfo->put_Author(L"Author Name");
+    pRegInfo->Release();
+    if (FAILED(hr)) {
+        std::cerr << "Cannot put identification info: " << hr << std::endl;
+        pTask->Release();
+        pRootFolder->Release();
+        CoUninitialize();
+        return 1;
+    }
+
+    ITriggerCollection *pTriggerCollection = NULL;
+    hr = pTask->get_Triggers(&pTriggerCollection);
+    if (FAILED(hr)) {
+        std::cerr << "Cannot get trigger collection: " << hr << std::endl;
+        pTask->Release();
+        pRootFolder->Release();
+        CoUninitialize();
+        return 1;
+    }
+
+    ITrigger *pTrigger = NULL;
+    hr = pTriggerCollection->Create(TASK_TRIGGER_DAILY, &pTrigger);
+    pTriggerCollection->Release();
+    if (FAILED(hr)) {
+        std::cerr << "Cannot create the trigger: " << hr << std::endl;
+        pTask->Release();
+        pRootFolder->Release();
+        CoUninitialize();
+        return 1;
+    }
+
+    IDailyTrigger *pDailyTrigger = NULL;
+    hr = pTrigger->QueryInterface(IID_IDailyTrigger, (void**)&pDailyTrigger);
+    pTrigger->Release();
+    if (FAILED(hr)) {
+        std::cerr << "QueryInterface call failed for IDailyTrigger: " << hr << std::endl;
+        pTask->Release();
+        pRootFolder->Release();
+        CoUninitialize();
+        return 1;
+    }
+
+    hr = pDailyTrigger->put_Id(_bstr_t(L"Trigger1"));
+    if (FAILED(hr)) {
+        std::cerr << "Cannot put trigger ID: " << hr << std::endl;
+        pDailyTrigger->Release();
+        pTask->Release();
+        pRootFolder->Release();
+        CoUninitialize();
+        return 1;
+    }
+
+    hr = pDailyTrigger->put_StartBoundary(_bstr_t(L"2024-07-04T12:00:00"));
+    if (FAILED(hr)) {
+        std::cerr << "Cannot put start boundary: " << hr << std::endl;
+        pDailyTrigger->Release();
+        pTask->Release();
+        pRootFolder->Release();
+        CoUninitialize();
+        return 1;
+    }
+
+    hr = pDailyTrigger->put_EndBoundary(_bstr_t(L"2024-07-04T14:00:00"));
+    if (FAILED(hr)) {
+        std::cerr << "Cannot put end boundary: " << hr << std::endl;
+        pDailyTrigger->Release();
+        pTask->Release();
+        pRootFolder->Release();
+        CoUninitialize();
+        return 1;
+    }
+
+    pDailyTrigger->Release();
+
+    IActionCollection *pActionCollection = NULL;
+    hr = pTask->get_Actions(&pActionCollection);
+    if (FAILED(hr)) {
+        std::cerr << "Cannot get actions pointer: " << hr << std::endl;
+        pTask->Release();
+        pRootFolder->Release();
+        CoUninitialize();
+        return 1;
+    }
+
+    IAction *pAction = NULL;
+    hr = pActionCollection->Create(TASK_ACTION_EXEC, &pAction);
+    pActionCollection->Release();
+    if (FAILED(hr)) {
+        std::cerr << "Cannot create the action: " << hr << std::endl;
+        pTask->Release();
+        pRootFolder->Release();
+        CoUninitialize();
+        return 1;
+    }
+
+    IExecAction *pExecAction = NULL;
+    hr = pAction->QueryInterface(IID_IExecAction, (void**)&pExecAction);
+    pAction->Release();
+    if (FAILED(hr)) {
+        std::cerr << "QueryInterface call failed for IExecAction: " << hr << std::endl;
+        pTask->Release();
+        pRootFolder->Release();
+        CoUninitialize();
+        return 1;
+    }
+
+    hr = pExecAction->put_Path(_bstr_t(L"C:\\Windows\\System32\\notepad.exe"));
+    pExecAction->Release();
+    if (FAILED(hr)) {
+        std::cerr << "Cannot put the action path: " << hr << std::endl;
+        pTask->Release();
+        pRootFolder->Release();
+        CoUninitialize();
+        return 1;
+    }
+
+    IRegisteredTask *pRegisteredTask = NULL;
+    hr = pRootFolder->RegisterTaskDefinition(
+        _bstr_t(L"MyTask"),
+        pTask,
+        TASK_CREATE_OR_UPDATE,
+        _variant_t(),
+        _variant_t(),
+        TASK_LOGON_INTERACTIVE_TOKEN,
+        _variant_t(L""),
+        &pRegisteredTask);
+    if (FAILED(hr)) {
+        std::cerr << "Error saving the Task : " << hr << std::endl;
+        pTask->Release();
+        pRootFolder->Release();
+        CoUninitialize();
+        return 1;
+    }
+
+    std::cout << "Success! Task successfully registered." << std::endl;
+
+    pRegisteredTask->Release();
+    pTask->Release();
+    pRootFolder->Release();
+    CoUninitialize();
+
+    return 0;
+}
